@@ -176,22 +176,33 @@ function App() {
         dbType: activeConnection.type.toLowerCase() 
       });
       
-      setResults(response);
-      
-      if (!response.success) {
+      // Safely handle the response
+      if (response) {
+        setResults(response);
+        
+        if (response.error) {
+          Notifications.show({
+            title: 'Query Error',
+            message: response.error,
+            color: 'red'
+          });
+        }
+      } else {
+        setResults(null);
         Notifications.show({
           title: 'Query Error',
-          message: response.error,
+          message: 'No response received from the server',
           color: 'red'
         });
       }
     } catch (error) {
+      console.error('Query execution error:', error);
+      setResults(null);
       Notifications.show({
         title: 'Query Error',
         message: String(error),
         color: 'red'
       });
-      setResults(null);
     } finally {
       setLoading(false);
     }

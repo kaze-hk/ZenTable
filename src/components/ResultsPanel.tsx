@@ -1,5 +1,6 @@
-import { Table, Card, Title, Stack, Text, Loader, Center, Badge, ScrollArea } from '@mantine/core';
+import { Table, Card, Title, Stack, Text, Loader, Center, Badge, ScrollArea, Group, Code } from '@mantine/core';
 import { QueryResult } from '../types';
+import { useState, useEffect } from 'react';
 
 interface ResultsPanelProps {
   results: QueryResult | null;
@@ -7,6 +8,37 @@ interface ResultsPanelProps {
 }
 
 export default function ResultsPanel({ results, loading }: ResultsPanelProps) {
+  const [processedResults, setProcessedResults] = useState<QueryResult | null>(null);
+  
+  // Process the results to ensure they're safe to render
+  useEffect(() => {
+    if (!results) {
+      setProcessedResults(null);
+      return;
+    }
+    
+    try {
+      // Create a safe copy of the results
+      const safeResults: QueryResult = {
+        columns: Array.isArray(results.columns) ? results.columns : [],
+        rows: Array.isArray(results.rows) ? results.rows : [],
+        affected_rows: results.affected_rows,
+        success: results.success,
+        error: results.error,
+      };
+      setProcessedResults(safeResults);
+    } catch (err) {
+      console.error("Error processing query results:", err);
+      setProcessedResults({
+        columns: [],
+        rows: [],
+        affected_rows: 0,
+        success: false,
+        error: "Failed to process results: " + String(err)
+      });
+    }
+  }, [results]);
+
   if (loading) {
     return (
       <Card withBorder p="md" radius="md">
@@ -17,7 +49,7 @@ export default function ResultsPanel({ results, loading }: ResultsPanelProps) {
     );
   }
 
-  if (!results) {
+  if (!processedResults) {
     return (
       <Card withBorder p="md" radius="md">
         <Center style={{ height: 200 }}>
@@ -29,20 +61,20 @@ export default function ResultsPanel({ results, loading }: ResultsPanelProps) {
     );
   }
 
-  if (!results.success && results.error) {
+  if (!processedResults.success && processedResults.error) {
     return (
       <Card withBorder p="md" radius="md">
         <Stack>
           <Title order={4}>Error</Title>
-          <Text color="red">{results.error}</Text>
+          <Text color="red">{processedResults.error}</Text>
         </Stack>
       </Card>
     );
   }
 
-  const { columns, rows, affected_rows } = results;
+  const { columns, rows, affected_rows } = processedResults;
 
-  if (rows.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     return (
       <Card withBorder p="md" radius="md">
         <Stack>
@@ -93,14 +125,19 @@ export default function ResultsPanel({ results, loading }: ResultsPanelProps) {
   );
 }
 
-function renderCellValue(value: any): string {
+function renderCellValue(value: any): JSX.Element {
   if (value === null || value === undefined) {
-    return 'NULL';
+    return <Text color="dimmed">NULL</Text>;
   }
   
   if (typeof value === 'object') {
-    return JSON.stringify(value);
+    try {
+      const jsonString = JSON.stringify(value, null, 2);
+      return <Code block>{jsonString}</Code>;
+    } catch (e) {
+      return <Text color="red">Error displaying object</Text>;
+    }
   }
   
-  return String(value);
+  return <>{String(value)}</>;
 }

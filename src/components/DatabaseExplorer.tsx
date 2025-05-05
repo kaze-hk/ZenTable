@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Card, Title, Stack, List, Text, Loader, Center, NavLink } from '@mantine/core';
+import { Card, Title, Stack, List, Text, Loader, Center, NavLink, Accordion, Box, Badge, Group } from '@mantine/core';
 import { invoke } from '@tauri-apps/api/core';
 import { Connection, DatabaseType } from '../types';
-import { FiDatabase, FiTable, FiList } from 'react-icons/fi';
+import { FiDatabase, FiTable, FiList, FiFolder, FiChevronRight } from 'react-icons/fi';
+import { SiMongodb } from 'react-icons/si';
 
 interface DatabaseExplorerProps {
   connection: Connection | null;
@@ -19,6 +20,8 @@ export default function DatabaseExplorer({ connection, onQuerySelect }: Database
   const [loading, setLoading] = useState<boolean>(false);
   const [items, setItems] = useState<DbItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [expandedDbs, setExpandedDbs] = useState<string[]>([]);
+  const [activeCollection, setActiveCollection] = useState<{db: string, collection: string} | null>(null);
 
   useEffect(() => {
     if (!connection || !connection.connectionId) {
@@ -62,6 +65,11 @@ export default function DatabaseExplorer({ connection, onQuerySelect }: Database
             });
           }
           structureItems = dbItems;
+          
+          // If we have databases, expand the first one by default
+          if (dbItems.length > 0 && dbItems[0].children && dbItems[0].children.length > 0) {
+            setExpandedDbs([dbItems[0].name]);
+          }
         }
         else if (connection.type === DatabaseType.POSTGRESQL) {
           // For PostgreSQL, get all databases, schemas, and tables
@@ -102,6 +110,16 @@ export default function DatabaseExplorer({ connection, onQuerySelect }: Database
     fetchDatabaseStructure();
   }, [connection]);
 
+  const toggleExpandDb = (dbName: string) => {
+    setExpandedDbs(prev => {
+      if (prev.includes(dbName)) {
+        return prev.filter(name => name !== dbName);
+      } else {
+        return [...prev, dbName];
+      }
+    });
+  };
+  
   const handleItemClick = (item: DbItem, parentDb?: string) => {
     let query = '';
     
@@ -113,12 +131,20 @@ export default function DatabaseExplorer({ connection, onQuerySelect }: Database
       } 
       else if (connection.type === DatabaseType.MONGODB) {
         if (item.type === 'collection' && parentDb) {
+          // Set active collection
+          setActiveCollection({ db: parentDb, collection: item.name });
+          
+          // Create MongoDB query to show documents
           query = JSON.stringify({
             db: parentDb,
             collection: item.name,
             operation: 'find',
             filter: {}
           }, null, 2);
+        } else if (item.type === 'database') {
+          // Toggle database expansion
+          toggleExpandDb(item.name);
+          return;
         }
       }
       else if (connection.type === DatabaseType.POSTGRESQL) {
@@ -203,29 +229,65 @@ export default function DatabaseExplorer({ connection, onQuerySelect }: Database
         )}
         
         {connection.type === DatabaseType.MONGODB && (
-          <List spacing="xs" size="sm">
+          <Box sx={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
             {items.map((db, dbIndex) => (
-              <List.Item 
+              <Box 
                 key={`db-${db.name}-${dbIndex}`}
-                icon={<FiDatabase size={16} />}
+                mb="xs"
               >
                 <NavLink
-                  label={db.name}
-                  childrenOffset={28}
-                >
-                  {db.children && db.children.map((coll, collIndex) => (
-                    <NavLink
-                      key={`coll-${coll.name}-${collIndex}`}
-                      label={coll.name}
-                      icon={<FiList size={14} />}
-                      onClick={() => handleItemClick(coll, db.name)}
-                      active={false}
+                  icon={<SiMongodb size={20} color="#00ED64" />}
+                  label={
+                    <Group position="apart" spacing={5} noWrap>
+                      <Text fw={600}>{db.name}</Text>
+                      <Badge size="xs" color="green">{db.children?.length || 0}</Badge>
+                    </Group>
+                  }
+                  onClick={() => handleItemClick(db)}
+                  rightSection={
+                    <FiChevronRight 
+                      size={16} 
+                      style={{ 
+                        transform: expandedDbs.includes(db.name) ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.2s ease'
+                      }} 
                     />
-                  ))}
-                </NavLink>
-              </List.Item>
+                  }
+                  active={expandedDbs.includes(db.name)}
+                />
+                
+                {expandedDbs.includes(db.name) && db.children && (
+                  <Box pl={36} mt={5}>
+                    {db.children.map((coll, collIndex) => (
+                      <NavLink
+                        key={`coll-${coll.name}-${collIndex}`}
+                        label={coll.name}
+                        icon={<FiFolder size={16} color="#FFD94D" />}
+                        onClick={() => handleItemClick(coll, db.name)}
+                        active={activeCollection?.db === db.name && activeCollection?.collection === coll.name}
+                        variant={activeCollection?.db === db.name && activeCollection?.collection === coll.name ? "filled" : "light"}
+                        color={activeCollection?.db === db.name && activeCollection?.collection === coll.name ? "blue" : undefined}
+                        mb={5}
+                        sx={(theme) => ({
+                          fontSize: theme.fontSizes.sm,
+                          borderRadius: theme.radius.sm,
+                          '&:hover': {
+                            backgroundColor: 
+                              activeCollection?.db === db.name && 
+                              activeCollection?.collection === coll.name ? 
+                              theme.colors.blue[7] : 
+                              theme.colorScheme === 'dark' ? 
+                              theme.colors.dark[6] : 
+                              theme.colors.gray[1]
+                          }
+                        })}
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
             ))}
-          </List>
+          </Box>
         )}
         
         {connection.type === DatabaseType.POSTGRESQL && (
