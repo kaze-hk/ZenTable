@@ -5,14 +5,13 @@ import {
   PasswordInput, 
   NumberInput, 
   Button, 
-  Group, 
   Stack, 
   Card, 
-  Text,
-  Box, 
-  FileInput
+  Text
 } from '@mantine/core';
 import { DatabaseType, Connection } from '../types';
+import { open } from '@tauri-apps/plugin-dialog';
+import { Notifications } from '@mantine/notifications';
 
 interface ConnectionPanelProps {
   onConnect: (connection: Connection) => void;
@@ -23,6 +22,7 @@ interface ConnectionPanelProps {
 export default function ConnectionPanel({ onConnect, loading, initialConnection }: ConnectionPanelProps) {
   const [activeTab, setActiveTab] = useState<string | null>('sqlite');
   const [sqlitePath, setSqlitePath] = useState<string | null>(null);
+  const [sqliteFile, setSqliteFile] = useState<File | null>(null);
   
   const [mongoConnectionString, setMongoConnectionString] = useState<string>('');
   const [mongoHost, setMongoHost] = useState<string>('localhost');
@@ -50,6 +50,8 @@ export default function ConnectionPanel({ onConnect, loading, initialConnection 
       if (initialConnection.type === DatabaseType.SQLITE) {
         setActiveTab('sqlite');
         setSqlitePath(initialConnection.path || null);
+        // 清空文件状态，因为只有路径可用
+        setSqliteFile(null);
       }
       else if (initialConnection.type === DatabaseType.MONGODB) {
         setActiveTab('mongodb');
@@ -132,25 +134,65 @@ export default function ConnectionPanel({ onConnect, loading, initialConnection 
         <Tabs.Panel value="sqlite" pt="xs">
           <Card withBorder shadow="sm" mt="md" p="md">
             <Stack>
-              <Text weight={500}>Connect to SQLite Database</Text>
-              <FileInput 
-                required
-                label="Database File" 
-                placeholder="Pick a SQLite database file"
-                onChange={file => file && setSqlitePath(file.path)}
-                accept=".db,.sqlite,.sqlite3"
-                value={null}  // Use null for the UI component
-              />
-              {sqlitePath && (
-                <Text size="sm" color="dimmed">Selected file: {sqlitePath}</Text>
+              <Text fw={500}>Connect to SQLite Database</Text>
+              <Button 
+                fullWidth
+                variant="outline" 
+                onClick={async () => {
+                  try {
+                    // 使用Tauri的dialog API打开文件选择器
+                    const selected = await open({
+                      multiple: false,
+                      filters: [{
+                        name: 'SQLite Database', 
+                        extensions: ['db', 'sqlite', 'sqlite3']
+                      }]
+                    });
+                    
+                    if (selected) {
+                      // 如果用户选择了文件
+                      if (typeof selected === 'string') {
+                        setSqlitePath(selected);
+                        // 显示文件名作为UI反馈
+                        const fileName = selected.split('/').pop() || selected.split('\\').pop() || selected;
+                        setSqliteFile({ name: fileName } as any);
+                      } else if (Array.isArray(selected) && selected.length > 0) {
+                        setSqlitePath(selected[0]);
+                        const fileName = selected[0].split('/').pop() || selected[0].split('\\').pop() || selected[0];
+                        setSqliteFile({ name: fileName } as any);
+                      }
+                    }
+                  } catch (err) {
+                    console.error('Error selecting SQLite file:', err);
+                    Notifications.show({
+                      title: '文件选择错误',
+                      message: `选择文件时出错: ${err}`,
+                      color: 'red'
+                    });
+                  }
+                }}
+              >
+                选择SQLite数据库文件
+              </Button>
+              
+              {sqliteFile && (
+                <Text size="sm" ta="center" fw={500}>
+                  已选择: {(sqliteFile as any).name}
+                </Text>
               )}
+              
+              {sqlitePath && (
+                <Text size="sm" color="dimmed">路径: {sqlitePath}</Text>
+              )}
+              
               <Button 
                 onClick={handleSqliteConnect}
                 loading={loading}
                 disabled={!sqlitePath}
                 fullWidth
+                color="blue"
               >
-                {initialConnection ? 'Update' : 'Connect'}
+                {initialConnection ? '更新连接' : '连接'}
               </Button>
             </Stack>
           </Card>
@@ -159,7 +201,7 @@ export default function ConnectionPanel({ onConnect, loading, initialConnection 
         <Tabs.Panel value="mongodb" pt="xs">
           <Card withBorder shadow="sm" mt="md" p="md">
             <Stack>
-              <Text weight={500}>Connect to MongoDB</Text>
+              <Text fw={500}>Connect to MongoDB</Text>
               
               <Tabs>
                 <Tabs.List>
@@ -242,7 +284,7 @@ export default function ConnectionPanel({ onConnect, loading, initialConnection 
         <Tabs.Panel value="postgres" pt="xs">
           <Card withBorder shadow="sm" mt="md" p="md">
             <Stack>
-              <Text weight={500}>Connect to PostgreSQL</Text>
+              <Text fw={500}>Connect to PostgreSQL</Text>
               
               <Tabs>
                 <Tabs.List>

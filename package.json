@@ -15,6 +15,7 @@
     "@mantine/hooks": "^8.0.0",
     "@mantine/notifications": "^8.0.0",
     "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.2.1",
     "@tauri-apps/plugin-opener": "^2",
     "axios": "^1.9.0",
     "mongodb": "^6.16.0",
